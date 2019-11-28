@@ -14,7 +14,10 @@ app.get('/index.html', function (req, res) {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 app.get('/getdata', function(request, response){
-  response.send('1234567890');
+  response.send('/getdata');
+});
+app.post('/postdata', function(request, response){
+  response.send('/postdata');
 });
 
 app.listen(port);

@@ -1,10 +1,12 @@
 import React from 'react';
-import logo from './logo.svg';
+import ReactDOM from 'react-dom';
 import './bootstrap.min.css';
 import { connect } from 'react-redux';
-import { createStore } from 'redux';
+import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
-
+import thunk from 'redux-thunk';
+import { makeRequest } from './ServerTalk'
+ 
 function getFromServer(path:string, params:{}, callBackFunc:Function):void{
   var ajax = new XMLHttpRequest();
   ajax.onreadystatechange = function(){
@@ -60,39 +62,6 @@ class MyDataTable extends React.Component {
   }
 }
 
-class BootBox extends React.Component {
-  render(){
-    const mStyle:{} = {display: 'block'};
-      return(
-<div>
-<div className="container">
-  <h2>Modal Example</h2>
-  <button type="button" className="btn btn-info btn-lg" data-toggle="modal" data-target="#myModal">Open Modal</button>
-
-  <div className="modal show" id="myModal" role="dialog" style={mStyle}>
-    <div className="modal-dialog">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h4 className="modal-title">Modal Header</h4>  
-          <button type="button" className="close" data-dismiss="modal">&times;</button>
-
-        </div>
-        <div className="modal-body">
-          <p>Some text in the modal.</p>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-danger" data-dismiss="modal">Close</button>
-        </div>
-      </div>
-      
-    </div>
-  </div>
-</div>
-<div className="modal-backdrop show"></div>
-</div>
-      );
-    }
-  }
 /*
 const App: React.FC = () => {
   return (
@@ -106,15 +75,28 @@ const App: React.FC = () => {
 //#######################################################################################################
 //=======================================================================================================
 // Reducers
-  
+
+type TodoListItem = {
+  text:string;
+  isActive:boolean;
+};
+
+type TodoListObject = {
+  todoListName:string;
+  todoListItems:TodoListItem[];
+}
+
 type TodoState = {
   currentText:string;
   todoList:[];
   previousAction:string;
   todoListFilter:string;
   todoListName:string;
-  todoLists:[];
+  todoLists:TodoListObject[];
   isShowTodoListMenu:boolean;
+  isShowModal:boolean;
+  modalType:string;
+  modalError:string;
 };
 
 const InitialState:TodoState = {
@@ -124,55 +106,93 @@ const InitialState:TodoState = {
   todoListFilter: 'all',
   todoListName: '',
   todoLists:[],
-  isShowTodoListMenu: false
+  isShowTodoListMenu: false,
+  isShowModal: false,
+  modalType: '',
+  modalError: ''
 };
 
-type TodoListItem = {
-  text:string;
-  isActive:boolean;
-};
+function checkListNameDuplicate(state:TodoState, listName:string){
+
+  for(let i = 0; i < state.todoLists.length; i++){
+    if(state.todoLists[i].todoListName === listName.trim()){
+      return true;
+    }
+  }
+  return false;
+}
 
 function myReducer(state:TodoState = InitialState, action:any){
   let newState = JSON.parse(JSON.stringify(state));
+        console.log(JSON.stringify(action));
   switch(action.type){
     case 'SET_CURRENT_TEXT':
       newState.currentText = action.value;
-      newState.previousAction = 'SET_CURRENT_TEXT';
       break;
     case 'ADD_ITEM':
       if(state.currentText){
         newState.todoList.push({text: state.currentText, isActive: true});
         newState.currentText = '';
-        newState.previousAction = 'ADD_ITEM';
       }
       break;
     case 'TOGGLE_ITEM':
       const toggledFlag = !newState.todoList[action.listIndex].isActive;
       newState.todoList[action.listIndex].isActive = toggledFlag;
-      newState.previousAction = 'TOGGLE_ITEM';
       break;
     case 'FILTER_LIST':
       const filters = ['all', 'active', 'completed'];
       if(filters.includes(action.todoListFilter)){
         newState.todoListFilter = action.todoListFilter;
-        newState.previousAction = 'FILTER_LIST';
       }
       break;
     case 'TOGGLE_TODOLIST_MENU':
       newState.isShowTodoListMenu = !state.isShowTodoListMenu;
       break;
+    case 'DO_MODAL':
+
+      newState.modalError = '';
+      switch(action.operation){
+        case 'SHOW_NEW':
+        case 'SHOW_SAVE':
+        case 'SHOW_DELETE':
+          newState.isShowModal = true;
+          break;
+        case 'CREATE_LIST':
+          if(checkListNameDuplicate(state, action.value)){
+            newState.modalError = 'This name already exists.';
+          }
+          else {
+            newState.todoListName = action.value;
+            newState.isShowModal = false;
+          }
+          break;
+        case 'SAVE_LIST':
+          newState.isShowModal = false;
+          break;
+        case 'DELETE_LIST':
+          newState.isShowModal = false;  
+          break;
+        case 'HIDE':
+          newState.isShowModal = false;
+          break;
+        default:
+            break;
+      }
+      newState.modalType = action.modalType;
+      break;
     default:
       break;
   }
+  newState.previousAction = action.type;
   return newState;
 }
 
-const myStore = createStore(myReducer);
+const myStore = createStore(myReducer, applyMiddleware(thunk));
 
 //=======================================================================================================
 // Actions
 
-function setCurrentText(text){
+function setCurrentText(text:string){
   return {type: 'SET_CURRENT_TEXT', value: text};
 }
 
@@ -180,16 +200,62 @@ function addItem(){
   return {type: 'ADD_ITEM'};
 }
 
-function toggleItem(listIndex){
+function toggleItem(listIndex:number){
   return {type: 'TOGGLE_ITEM', listIndex: listIndex};
 }
 
-function setFilter(filter){
+function setFilter(filter:string){
   return {type: 'FILTER_LIST', todoListFilter: filter};
 }
 
 function toggleTodoListMenu(){
   return {type: 'TOGGLE_TODOLIST_MENU'};
+}
+
+function doModal(operation:string, value?:string){
+
+  function doModal2(){
+    console.log('dispatching...');
+    const modalTypeMap = {
+      'SHOW_NEW' : 'SHOW_NEW',  
+      'SHOW_SAVE' : 'SHOW_SAVE',
+      'SHOW_DELETE' : 'SHOW_DELETE',
+      'CREATE_LIST': '',
+      'SAVE_LIST' : '',
+      'DELETE_LIST': '',
+      'HIDE': ''
+    };
+    return {type: 'DO_MODAL', operation: operation, modalType: modalTypeMap[operation], value:value};      
+  }
+  const serverOperations = ['SAVE_LIST', 'DELETE_LIST'];
+
+  return function(dispatch:Function){
+//bookmark
+    if(!serverOperations.includes(operation)){
+      dispatch(doModal2());
+    }
+    else {
+      let path:string = '/';
+      let method:string = 'GET';
+      if(operation === 'SAVE_LIST'){
+        path = '/save';
+      }
+      else if(operation === 'DELETE_LIST'){
+        path = '/delete';
+      }
+      return makeRequest(path, method).then(
+        function(result:string){
+          let parsedObj:{}; 
+          try {
+            parsedObj = JSON.parse(result);
+          }
+          catch(error){
+          }
+          dispatch(doModal2());
+        }
+      );
+    }
+  }
 }
 
 //=======================================================================================================
@@ -360,7 +426,9 @@ type TodoHeaderProps = {
 */
 type TodoHeaderProps = {
   isShowTodoListMenu:boolean;
+  todoListName:string;
   toggleTodoListMenu:Function;
+  doModal:Function;
 }
 
 class TodoHeader extends React.Component {
@@ -369,29 +437,40 @@ class TodoHeader extends React.Component {
 
   constructor(props:TodoHeaderProps){
     super(props);
-    this.newTodoList = this.newTodoList.bind(this);
-    this.deleteTodoList = this.deleteTodoList.bind(this);
     this.buttonClick = this.buttonClick.bind(this);
-  }
-
-  newTodoList(){
-  }
-
-  deleteTodoList(){
   }
 
   buttonClick(event){
     let id = event.target.id;
+    let data = event.target.dataset;
     if(id === 'todoDropDown'){
+      this.props.toggleTodoListMenu();
+    }
+    else if(id === 'new'){
+      this.props.doModal('SHOW_NEW');
+    }
+    else if(id === 'save'){
+      this.props.doModal('SHOW_SAVE');
+    }
+    else if(id === 'delete'){
+      this.props.doModal('SHOW_DELETE');
+    }
+    else if(data.islistitem === 'true'){
       this.props.toggleTodoListMenu();
     }
   }
 
+  componentDidMount() {
+  }
+
+  componentWillUnmount() {
+  }
+
   render(){
-    const todoListName:string = '(Unsaved list)';
+    let todoListName:string = this.props.todoListName ? this.props.todoListName : '(Unsaved list)';
     let todoListNames:any[] = [];
     for(let i = 1; i <= 10; i++){
-      todoListNames.push(<a key={i} className='dropdown-item' href='#'>Link {i}</a>);
+      todoListNames.push(<a key={i} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true'>Link {i}</a>);
     }
     let dropDownMenuClass:string = 'dropdown-menu';
     if(this.props.isShowTodoListMenu){
@@ -401,7 +480,7 @@ class TodoHeader extends React.Component {
       <div className='row mb-3'>
         <div className='col'>
           <div className='dropdown'>
-            <button id='todoDropDown' className='btn btn-primary dropdown-toggle' onClick={this.buttonClick}>
+            <button id='todoDropDown' className='btn btn-primary dropdown-toggle' onClick={this.buttonClick} onBlur={this.buttonClick}>
               {todoListName}
             </button>
             <div className={dropDownMenuClass}>
@@ -412,6 +491,7 @@ class TodoHeader extends React.Component {
         <div className='col'>
           <div className='float-right'>     
             <button className='btn btn-primary' id='new' onClick={this.buttonClick} >New</button>&nbsp;
+            <button className='btn btn-info' id='save' onClick={this.buttonClick} >Save</button>&nbsp;
             <button className='btn btn-warning' id='delete' onClick={this.buttonClick} >Delete</button>
           </div>
         </div>
@@ -421,10 +501,11 @@ class TodoHeader extends React.Component {
 };
 
 const mapStateToProps4 = (state, props) => 
-  ({isShowTodoListMenu: state.isShowTodoListMenu});
+  ({isShowTodoListMenu: state.isShowTodoListMenu, todoListName: state.todoListName});
 
 const mapDispatchToProps4 = {
-  toggleTodoListMenu
+  toggleTodoListMenu,
+  doModal
 };
 
 const TodoHeader1 = connect(mapStateToProps4, mapDispatchToProps4)(TodoHeader);
@@ -433,20 +514,131 @@ const TodoHeader1 = connect(mapStateToProps4, mapDispatchToProps4)(TodoHeader);
 // Modal component
 
 type MyModalProps = {
-  isActive:boolean;
+  isShowModal:boolean;
+  modalType:string;
+  doModal:Function;
 };
 
 class MyModal extends React.Component {
-  render(){
-    return(
-      <div></div>   
-    );
+  
+  props:MyModalProps;
+  modalInputText:string;
+  
+  constructor(props:MyModalProps){
+    super(props);
+    this.state = {suppressUpdate: false};
+    this.buttonClick = this.buttonClick.bind(this);
+    this.onChangeInputText = this.onChangeInputText.bind(this);
+    this.modalInputText = '';
   }
+
+  onChangeInputText(event){
+    let id = event.target.id;
+    if(id == 'todoListNameInput'){
+      this.modalInputText = event.target.value;
+    }
+  }
+
+  buttonClick(event){
+    console.log(JSON.stringify(this.props));
+    let id = event.target.id;
+/*
+      'CREATE_LIST': 'HIDE',
+      'SAVE_LIST' : 'HIDE',
+      'DELETE_LIST' : 'HIDE',
+*/    
+    if(id === 'okay'){
+      switch(this.props.modalType){
+        case 'SHOW_NEW':
+          if(this.modalInputText){
+            this.props.doModal('CREATE_LIST', this.modalInputText); 
+          }
+          break;
+        case 'SHOW_SAVE':
+          break;
+        case 'SHOW_DELETE':
+        default:
+          break;
+      };//bookmark
+    }
+    else if(id === 'close'){
+      this.props.doModal('HIDE');
+    }
+  }
+
+  render(){
+    const modalTypeMap = {
+      'SHOW_NEW' : {title: 'Create New List',
+         body: 
+           <div className='row'>
+             <div className='col-4'>Todolist Name</div>
+             <div className='col-8'>
+               <input className='form-control' id='todoListNameInput' type='text' onChange={this.onChangeInputText} />
+            </div>
+           </div>
+         },
+      'SHOW_SAVE' : {title: 'Save List', body: <span>Do you want to save the current list?</span>},
+      'SHOW_DELETE' : {title: 'Delete List', body: <span>Do you want to delete the current list?</span>},
+      'NONE': {title: '', body: ''}
+    };
+    const modalType = this.props.modalType ? this.props.modalType : 'NONE';
+    const modalTitle:string = modalTypeMap[modalType].title;
+    const modalBody:string = modalTypeMap[modalType].body;
+    const isShow = this.props.isShowModal ? 'show' : '';
+    const mStyle:{} = isShow ? {display: 'block'} : {};
+    const modalBackdrop:{} = isShow ? (<div className={"modal-backdrop show"}></div>) : [];
+    return(
+      <div>
+        <div className="container">
+          <div className="modal" id="myModal" style={mStyle}>
+            <div className="modal-dialog">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h4 className="modal-title">{modalTitle}</h4>  
+                  <button type="button" id='close' className="close" data-dismiss="modal" onClick={this.buttonClick}>&times;</button>
+                </div>
+                <div className="modal-body">
+                  {modalBody}
+                </div>
+                <div className="modal-footer">
+                  <div className="row">
+                    <div className="col">
+                      <button type="button" id='okay' className="btn btn-primary" data-dismiss="modal" onClick={this.buttonClick}>Confirm</button>
+                    </div>                    
+                    <div className="col">
+                      <button type="button" id='close' className="btn btn-danger" data-dismiss="modal" onClick={this.buttonClick}>Close</button>
+                    </div>
+                  </div>
+                </div>
+              </div>      
+            </div>
+          </div>
+        </div>
+        {modalBackdrop}
+      </div>
+      );
+    }
+  }
+
+const mapStateToProps5 = (state, props) => 
+  ({isShowModal: state.isShowModal, modalType: state.modalType});
+
+const mapDispatchToProps5 = {
+  doModal
 };
+
+const MyModal1 = connect(mapStateToProps5, mapDispatchToProps5)(MyModal);
+//=======================================================================================================
+// Registration component
+
+
+//=======================================================================================================  
+// Login component
 
 //=======================================================================================================
 
 // Main application 
+
 const App:React.FC = () => {
   return (
    <Provider store={myStore}>
@@ -455,6 +647,7 @@ const App:React.FC = () => {
       <TodoInput1/>
       <TodoList1/>        
       <TodoFooter1/>
+      <MyModal1/>
     </div>
    </Provider>
   );
