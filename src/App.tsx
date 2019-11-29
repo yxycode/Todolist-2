@@ -5,7 +5,7 @@ import { connect } from 'react-redux';
 import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
 import thunk from 'redux-thunk';
-import { makeRequest } from './ServerTalk'
+import { makeRequest } from './ServerTalk';
  
 function getFromServer(path:string, params:{}, callBackFunc:Function):void{
   var ajax = new XMLHttpRequest();
@@ -238,10 +238,12 @@ function doModal(operation:string, value?:string){
       let path:string = '/';
       let method:string = 'GET';
       if(operation === 'SAVE_LIST'){
-        path = '/save';
+        method = 'POST';
+        path = '/postdata';
       }
       else if(operation === 'DELETE_LIST'){
-        path = '/delete';
+        method = 'POST';
+        path = '/postdata';
       }
       return makeRequest(path, method).then(
         function(result:string){
