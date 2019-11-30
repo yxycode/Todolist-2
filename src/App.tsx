@@ -5,7 +5,7 @@ import { connect } from 'react-redux';
 import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
 import thunk from 'redux-thunk';
-import { makeRequest } from './ServerTalk';
+import { makeRequest, getCookie, setCookie, deleteCookie } from './ServerTalk';
  
 function getFromServer(path:string, params:{}, callBackFunc:Function):void{
   var ajax = new XMLHttpRequest();
@@ -82,15 +82,17 @@ type TodoListItem = {
 };
 
 type TodoListObject = {
+  _id: string;
   todoListName:string;
   todoListItems:TodoListItem[];
 }
 
 type TodoState = {
   currentText:string;
-  todoList:[];
+  todoListItems:[];
   previousAction:string;
   todoListFilter:string;
+  todoListId: string;
   todoListName:string;
   todoLists:TodoListObject[];
   isShowTodoListMenu:boolean;
@@ -101,9 +103,10 @@ type TodoState = {
 
 const InitialState:TodoState = {
   currentText: '',
-  todoList: [],
+  todoListItems: [],
   previousAction: '',
   todoListFilter: 'all',
+  todoListId: '',
   todoListName: '',
   todoLists:[],
   isShowTodoListMenu: false,
@@ -111,16 +114,6 @@ const InitialState:TodoState = {
   modalType: '',
   modalError: ''
 };
-
-function checkListNameDuplicate(state:TodoState, listName:string){
-
-  for(let i = 0; i < state.todoLists.length; i++){
-    if(state.todoLists[i].todoListName === listName.trim()){
-      return true;
-    }
-  }
-  return false;
-}
 
 function myReducer(state:TodoState = InitialState, action:any){
   let newState = JSON.parse(JSON.stringify(state));
@@ -131,13 +124,13 @@ function myReducer(state:TodoState = InitialState, action:any){
       break;
     case 'ADD_ITEM':
       if(state.currentText){
-        newState.todoList.push({text: state.currentText, isActive: true});
+        newState.todoListItems.push({text: state.currentText, isActive: true});
         newState.currentText = '';
       }
       break;
     case 'TOGGLE_ITEM':
-      const toggledFlag = !newState.todoList[action.listIndex].isActive;
-      newState.todoList[action.listIndex].isActive = toggledFlag;
+      const toggledFlag = !newState.todoListItems[action.listIndex].isActive;
+      newState.todoListItems[action.listIndex].isActive = toggledFlag;
       break;
     case 'FILTER_LIST':
       const filters = ['all', 'active', 'completed'];
@@ -167,10 +160,22 @@ function myReducer(state:TodoState = InitialState, action:any){
           }
           break;
         case 'SAVE_LIST':
-          newState.isShowModal = false;
+          if(!action.isSuccess){
+            newState.modalError = 'Failed to save list.';
+          }
+          else {
+            //todo: get id from database operation result and set it on new state
+            copyUpdateTodoList(newState);
+            newState.isShowModal = false;
+          }
           break;
         case 'DELETE_LIST':
-          newState.isShowModal = false;  
+          if(!action.isSuccess){
+            newState.modalError = 'Failed to delete list.';
+          }
+          else {
+            newState.isShowModal = false;  
+          }
           break;
         case 'HIDE':
           newState.isShowModal = false;
@@ -188,6 +193,64 @@ function myReducer(state:TodoState = InitialState, action:any){
 }
 
 const myStore = createStore(myReducer, applyMiddleware(thunk));
+
+//=======================================================================================================
+// Utilities
+
+function checkListNameDuplicate(state:TodoState, listName:string){
+
+  for(let i = 0; i < state.todoLists.length; i++){
+    if(state.todoLists[i].todoListName === listName.trim()){
+      return true;
+    }
+  }
+  return false;
+
+}
+
+function getCurrentTodoList(){
+
+  const mainState = myStore.getState();
+  const todoList = {
+    _id: '',
+    todoListName: mainState.todoListName,
+    todoListItems: []
+  };
+
+  for(let i = 0; i < mainState.todoLists.length; i++){
+    if(mainState.todoListName === mainState.todoLists[i].todoListName){
+      todoList._id = mainState.todoLists[i]._id;
+      break;
+    }
+  }
+  for(let i = 0; i < mainState.todoListItems.length; i++){
+    todoList.todoListItems.push(mainState.todoListItems[i]);
+  }
+  return todoList;  
+}
+
+function copyUpdateTodoList(state:TodoState){
+    
+  let todoList:TodoListObject = JSON.parse(JSON.stringify({
+    _id: state.todoListId,
+    todoListName: state.todoListName,
+    todoListItems: state.todoListItems
+  }));
+
+  let isFoundExisting = false;
+
+  for(let i = 0; i < state.todoLists.length; i++){
+    if(state.todoLists[i].todoListName == todoList.todoListName){
+      state.todoLists[i] = todoList;
+      isFoundExisting = true;
+      break;
+    }
+  }
+  if(!isFoundExisting){
+    state.todoLists.push(todoList);
+  }
+  return state;
+}
 
 //=======================================================================================================
 // Actions
@@ -213,7 +276,9 @@ function toggleTodoListMenu(){
 }
 
 function doModal(operation:string, value?:string){
-
+  
+  let isSuccess = false;
+  let result = {};
   function doModal2(){
     console.log('dispatching...');
     const modalTypeMap = {
@@ -225,31 +290,47 @@ function doModal(operation:string, value?:string){
       'DELETE_LIST': '',
       'HIDE': ''
     };
-    return {type: 'DO_MODAL', operation: operation, modalType: modalTypeMap[operation], value:value};      
+    return {type: 'DO_MODAL', operation: operation, modalType: modalTypeMap[operation], value:value, isSuccess: isSuccess,
+      result: result};      
   }
   const serverOperations = ['SAVE_LIST', 'DELETE_LIST'];
 
   return function(dispatch:Function){
 //bookmark
     if(!serverOperations.includes(operation)){
-      dispatch(doModal2());
+      return function(){
+        dispatch(doModal2());
+      }
     }
     else {
       let path:string = '/';
       let method:string = 'GET';
-      if(operation === 'SAVE_LIST'){
-        method = 'POST';
-        path = '/postdata';
+      const currentList = getCurrentTodoList();
+      let operationMap = {
+        'SAVE_LIST': {
+          method: 'POST',
+          path: '/postdata',
+          formFields: currentList
+        },
+        'DELETE_LIST': {
+          method: 'POST',
+          path: '/postdata',
+          formFields: {_id: currentList._id}        
+        }
+      };
+      const headerFields = {};
+      const jwtToken = getCookie('token');
+      if(jwtToken){
+        headerFields['authorization'] = jwtToken;
       }
-      else if(operation === 'DELETE_LIST'){
-        method = 'POST';
-        path = '/postdata';
-      }
-      return makeRequest(path, method).then(
-        function(result:string){
-          let parsedObj:{}; 
+
+      return makeRequest(path, method, headerFields).then(
+        function(result:any){
+          let parsedObj:any; 
           try {
             parsedObj = JSON.parse(result);
+            isSuccess = parsedObj.isSuccess;
+            result = parsedObj.result;
           }
           catch(error){
           }
@@ -354,7 +435,7 @@ class TodoList extends React.Component {
 }
 
 const mapStateToProps2 = (state, props) => 
-  ({todoItems: state.todoList, todoListFilter: state.todoListFilter});
+  ({todoItems: state.todoListItems, todoListFilter: state.todoListFilter});
 
 const mapDispatchToProps2 = {
   toggleItem
@@ -416,16 +497,7 @@ const TodoFooter1 = connect(mapStateToProps3, mapDispatchToProps3)(TodoFooter);
 
 //=======================================================================================================
 // Todo list header
-/*
-type TodoHeaderProps = {
-  isShowTodoListMenu:boolean;
-  todoListName:string;
-  newTodoList:Function;
-  deleteTodoList:Function;
-  buttonClick:Function;
-  toggleTodoListMenu:Function;
-};
-*/
+
 type TodoHeaderProps = {
   isShowTodoListMenu:boolean;
   todoListName:string;
@@ -518,6 +590,7 @@ const TodoHeader1 = connect(mapStateToProps4, mapDispatchToProps4)(TodoHeader);
 type MyModalProps = {
   isShowModal:boolean;
   modalType:string;
+  modalError:string;
   doModal:Function;
 };
 
@@ -569,6 +642,7 @@ class MyModal extends React.Component {
   }
 
   render(){
+    const modalError = <span className='alert-danger'>{this.props.modalError}</span>;
     const modalTypeMap = {
       'SHOW_NEW' : {title: 'Create New List',
          body: 
@@ -600,7 +674,12 @@ class MyModal extends React.Component {
                   <button type="button" id='close' className="close" data-dismiss="modal" onClick={this.buttonClick}>&times;</button>
                 </div>
                 <div className="modal-body">
-                  {modalBody}
+                  <div className="row">
+                    {modalBody}
+                  </div>
+                  <div className="row">
+                    {modalError}
+                  </div>
                 </div>
                 <div className="modal-footer">
                   <div className="row">
@@ -623,7 +702,7 @@ class MyModal extends React.Component {
   }
 
 const mapStateToProps5 = (state, props) => 
-  ({isShowModal: state.isShowModal, modalType: state.modalType});
+  ({isShowModal: state.isShowModal, modalType: state.modalType, modalError: state.modalError});
 
 const mapDispatchToProps5 = {
   doModal
