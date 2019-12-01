@@ -33,7 +33,12 @@ mdb.init(function(){
         mdb.createUserRequest(request, function(result){
           response.send(result);
         });
-        break;        
+        break;     
+      case 'VALIDATE_TOKEN':
+        mdb.validateToken(request, function(result){
+          response.send(result);
+        });
+        break;   
       case 'LOGIN':
         mdb.loginRequest(request, function(result){
           response.send(result);

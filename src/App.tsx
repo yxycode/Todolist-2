@@ -99,6 +99,7 @@ type TodoState = {
   isShowModal:boolean;
   modalType:string;
   modalError:string;
+  jwtToken:string;
 };
 
 const InitialState:TodoState = {
@@ -112,7 +113,8 @@ const InitialState:TodoState = {
   isShowTodoListMenu: false,
   isShowModal: false,
   modalType: '',
-  modalError: ''
+  modalError: '',
+  jwtToken: ''
 };
 
 function myReducer(state:TodoState = InitialState, action:any){
@@ -164,7 +166,7 @@ function myReducer(state:TodoState = InitialState, action:any){
             newState.modalError = 'Failed to save list.';
           }
           else {
-            //todo: get id from database operation result and set it on new state
+            newState.todoListId = action.result.insertedId || newState.todoListId;
             copyUpdateTodoList(newState);
             newState.isShowModal = false;
           }
@@ -174,6 +176,7 @@ function myReducer(state:TodoState = InitialState, action:any){
             newState.modalError = 'Failed to delete list.';
           }
           else {
+            removeTodoList(newState, state.todoListId);
             newState.isShowModal = false;  
           }
           break;
@@ -184,6 +187,9 @@ function myReducer(state:TodoState = InitialState, action:any){
             break;
       }
       newState.modalType = action.modalType;
+      break;
+    case 'SET_TOKEN':
+      newState.jwtToken = action.token;
       break;
     default:
       break;
@@ -230,7 +236,7 @@ function getCurrentTodoList(){
 }
 
 function copyUpdateTodoList(state:TodoState){
-    
+
   let todoList:TodoListObject = JSON.parse(JSON.stringify({
     _id: state.todoListId,
     todoListName: state.todoListName,
@@ -240,7 +246,7 @@ function copyUpdateTodoList(state:TodoState){
   let isFoundExisting = false;
 
   for(let i = 0; i < state.todoLists.length; i++){
-    if(state.todoLists[i].todoListName == todoList.todoListName){
+    if(state.todoLists[i].todoListName === todoList.todoListName){
       state.todoLists[i] = todoList;
       isFoundExisting = true;
       break;
@@ -250,6 +256,21 @@ function copyUpdateTodoList(state:TodoState){
     state.todoLists.push(todoList);
   }
   return state;
+}
+
+function removeTodoList(state:TodoState, todoListId:string){
+
+  if(todoListId){
+    for(let i = 0; i < state.todoLists.length; i++){
+      if(state.todoLists[i]._id === todoListId){
+        state.todoLists.splice(i, 1);
+        break;          
+      }
+    }
+    state.todoListId = '';
+    state.todoListName = '';
+    state.todoListItems = [];
+  }
 }
 
 //=======================================================================================================
@@ -310,12 +331,12 @@ function doModal(operation:string, value?:string){
         'SAVE_LIST': {
           method: 'POST',
           path: '/postdata',
-          formFields: currentList
+          formFields: {command: 'SAVE_LIST', todoList: currentList}
         },
         'DELETE_LIST': {
           method: 'POST',
           path: '/postdata',
-          formFields: {_id: currentList._id}        
+          formFields: {command: 'DELETE_LIST', _id: currentList._id}        
         }
       };
       const headerFields = {};
@@ -323,8 +344,11 @@ function doModal(operation:string, value?:string){
       if(jwtToken){
         headerFields['authorization'] = jwtToken;
       }
+      method = operationMap[operation].method;
+      path = operationMap[operation].path;
+      const formFields = operationMap[operation].formFields;
 
-      return makeRequest(path, method, headerFields).then(
+      return makeRequest(path, method, headerFields, formFields).then(
         function(result:any){
           let parsedObj:any; 
           try {
@@ -501,6 +525,7 @@ const TodoFooter1 = connect(mapStateToProps3, mapDispatchToProps3)(TodoFooter);
 type TodoHeaderProps = {
   isShowTodoListMenu:boolean;
   todoListName:string;
+  todoLists: TodoList[];
   toggleTodoListMenu:Function;
   doModal:Function;
 }
@@ -542,9 +567,10 @@ class TodoHeader extends React.Component {
 
   render(){
     let todoListName:string = this.props.todoListName ? this.props.todoListName : '(Unsaved list)';
-    let todoListNames:any[] = [];
-    for(let i = 1; i <= 10; i++){
-      todoListNames.push(<a key={i} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true'>Link {i}</a>);
+    let todoListNames:{}[] = [];
+    const todoLists = this.props.todoLists;
+    for(let i = 0; i <= todoLists.length; i++){
+      todoListNames.push(<a key={i} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true'>todoLists[i].todoListName</a>);
     }
     let dropDownMenuClass:string = 'dropdown-menu';
     if(this.props.isShowTodoListMenu){
@@ -575,7 +601,7 @@ class TodoHeader extends React.Component {
 };
 
 const mapStateToProps4 = (state, props) => 
-  ({isShowTodoListMenu: state.isShowTodoListMenu, todoListName: state.todoListName});
+  ({isShowTodoListMenu: state.isShowTodoListMenu, todoListName: state.todoListName, todoLists: state.todoLists});
 
 const mapDispatchToProps4 = {
   toggleTodoListMenu,
@@ -609,7 +635,7 @@ class MyModal extends React.Component {
 
   onChangeInputText(event){
     let id = event.target.id;
-    if(id == 'todoListNameInput'){
+    if(id === 'todoListNameInput'){
       this.modalInputText = event.target.value;
     }
   }
@@ -710,25 +736,329 @@ const mapDispatchToProps5 = {
 
 const MyModal1 = connect(mapStateToProps5, mapDispatchToProps5)(MyModal);
 //=======================================================================================================
+// Token validator component
+
+type InitializeWrapProps = {
+};
+
+class InitializeWrap extends React.Component {
+
+  props:InitializeWrapProps;
+  state:any;
+  This:InitializeWrap;
+
+  constructor(props:InitializeWrapProps){
+    super(props);
+    this.state = {
+      isTokenChecked: false,
+      jwtToken: getCookie('token'),
+      page: ''
+    };
+  }
+
+  componentDidMount() {
+    const This:any = this;
+    if(this.state.jwtToken){
+      if(!this.state.isTokenChecked){
+        makeRequest('/postdata', 'POST', {'authorization':this.state.jwtToken}, 
+          {command: 'VALIDATE_TOKEN'}).then(function(result:any){
+          if(result.isSuccess){
+            This.setState({isTokenChecked: true, page: 'account'});
+          }
+          else {
+            This.setState({jwtToken: '', page: 'login'});
+            deleteCookie('token');
+          }
+        });
+      }
+    }
+    else {
+      this.setState({isTokenChecked: true, page: 'login'});
+    }
+  }
+
+  shouldComponentUpdate(nextProps, nextState){
+    return this.state.page !== nextState.page || this.state.isTokenChecked !== nextState.isTokenChecked 
+      || this.state.jwtToken !== nextState.jwtToken;
+  }
+
+  render(){
+    if(!this.state.isTokenChecked){
+      return(<div>Checking credentials...</div>);
+    }
+    else if(this.state.isTokenChecked && this.state.jwtToken && this.state.page === 'account'){
+      return(
+        <div className='w-50 m-3'>
+          <TodoHeader1/>
+          <TodoInput1/>
+          <TodoList1/>        
+          <TodoFooter1/>
+          <MyModal1/>
+        </div>
+      );
+    }
+    else if(this.state.isTokenChecked && !this.state.jwtToken){
+      if(this.state.page === 'login'){
+        return(
+          <div className='w-50 m-3'>
+            <Login parent={this} />
+          </div>
+        );
+      }
+      else if(this.state.page === 'register'){
+        return(
+          <div className='w-50 m-3'>
+            <Registration parent={this} />
+          </div>
+        );          
+      }
+    }
+  }
+}
+
+//=======================================================================================================
 // Registration component
 
+class Registration extends React.Component {
+
+  props:any;
+  state:any;
+  email:string;
+  username:string;
+  password:string;
+  elements:any;
+  inputs:any;
+
+  constructor(props){
+    super(props);
+    this.state = {errorMessage: '', hasError:false};
+    this.changeInput = this.changeInput.bind(this);
+    this.click = this.click.bind(this);
+    this.inputs = {
+      email: {message: '', errorClass: '', value: ''},
+      username: {message: '', errorClass: '', value: ''},
+      password: {message: '', errorClass: '', value: ''}
+    };
+    deleteCookie('token');
+  }
+
+  changeInput(event){
+    if(event.target.id === 'email'){
+      this.inputs.email.value = event.target.value;
+    }      
+    else if(event.target.id === 'username'){
+      this.inputs.username.value = event.target.value;
+    }
+    else if(event.target.id === 'password'){
+      this.inputs.password.value = event.target.value;
+    }   
+  }
+
+  click(event){
+    let hasError:boolean = false;
+    const This:any = this;
+    if(event.target.id === 'gotoLogin'){
+      this.props.parent.setState({page: 'login'});
+      return;
+    }
+    if(event.target.id === 'signup'){
+      if(!this.inputs.email.value){
+        this.inputs.email.errorClass = 'is-invalid';
+        this.inputs.email.message = 'Email address is required.';
+        hasError = true;
+      }
+      else {
+        this.inputs.email.errorClass = '';            
+        this.inputs.email.message = '';        
+      }
+      if(!this.inputs.username.value){
+        this.inputs.username.errorClass = 'is-invalid';
+        this.inputs.username.message = 'Username is required.';
+        hasError = true;
+      }
+      else {
+        this.inputs.username.errorClass = '';
+        this.inputs.username.message = '';              
+      }
+      if(!this.inputs.password.value){
+        this.inputs.password.errorClass = 'is-invalid';
+        this.inputs.password.message = 'Password is required.';
+        hasError = true;
+      }
+      else {
+        this.inputs.password.errorClass = '';
+        this.inputs.password.message = '';         
+      } 
+      if(!hasError){
+        makeRequest('/postdata', 'POST', {}, {command: 'CREATE_USER', email: this.inputs.email.value, 
+          username: this.inputs.username.value, password: this.inputs.password.value}).then(function(result:any){
+          if(result.isSuccess){
+            This.setState({isSuccessfulAccountCreation: true});
+            setCookie('token', result.token, 1);
+          }
+          else {
+            This.setState({errorMessage: 'Failed to register account.'});
+            deleteCookie('token');
+          }
+        });              
+      } 
+      else {
+        this.setState({hasError: true});
+      }      
+    }
+  }
+
+  shouldComponentUpdate(nextProps, nextState){
+    return this.state.hasError != nextState.hasError;
+  }
+
+  render(){
+    let errorMessage = <span></span>;
+    if(this.state.errorMessage){
+      errorMessage = <span className='alert-danger'>{this.state.errorMessage}</span>;
+    }
+    if(this.state.isSuccessfulAccountCreation){
+      return(
+        <div>Successfully created account. Please <a href='#' id='gotoLogin' onClick={this.click}>here</a> 
+          to go to the login page.
+        </div>   
+      );
+    }
+    return(     
+      <div> 
+        <div className='row'>
+          {errorMessage}            
+        </div>
+        <h3>Register a New Account</h3>
+        <div className='row'>
+          <div className='col mt-1'>
+           <label htmlFor='email'>Email</label>  
+            <input id='email' className={'form-control ' + this.inputs.email.errorClass} type='text' onChange={this.changeInput} />
+            <div className='invalid-feedback'>{this.inputs.email.message}</div>
+          </div>
+        </div>        
+        <div className='row mt-1'>
+          <div className='col'>
+            <label htmlFor='username'>Username</label>  
+            <input id='username' className={'form-control ' + this.inputs.username.errorClass} type='text' onChange={this.changeInput} />
+            <div className='invalid-feedback'>{this.inputs.username.message}</div>
+          </div>
+        </div>
+        <div className='row mt-1'>
+          <div className='col'>
+            <label htmlFor='password'>Password</label>  
+            <input id='password' className={'form-control ' + this.inputs.password.errorClass} type='password' onChange={this.changeInput} />
+            <div className='invalid-feedback'>{this.inputs.password.message}</div>
+          </div>            
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <button id='signup' className='btn btn-primary float-right' onClick={this.click}>Sign up</button>
+          </div>            
+        </div>
+      </div>);
+  }
+}
 
 //=======================================================================================================  
 // Login component
 
-//=======================================================================================================
+class Login extends React.Component {
 
+  username:string;
+  password:string;
+  props:any;
+  state:any;
+
+  constructor(props){
+    super(props);
+    this.changeInput = this.changeInput.bind(this);
+    this.click = this.click.bind(this);
+    this.state = {errorMessage: ''};
+  }
+
+  changeInput(event){
+    if(event.target.id === 'username'){
+      this.username = event.target.value;
+    }
+    else if(event.target.id === 'password'){
+      this.password = event.target.value;
+    }   
+  }
+
+  click(event){
+    const This:any = this;
+    if(event.target.id === 'signup'){
+      this.props.parent.setState({page: 'register'});
+    }
+    else if(event.target.id === 'signin'){
+      if(this.username && this.password){
+        makeRequest('/postdata', 'POST', {}, {command: 'LOGIN', username: this.username, 
+          password: this.password}).then(function(result:any){
+          if(result.isSuccess){
+            This.props.parent.setState({isTokenChecked: true, jwtToken: result.token, page: 'account'});
+            setCookie('token', result.token, 1);
+          }
+          else {
+            This.setState({errorMessage: 'Invalid username and/or password.'});
+            deleteCookie('token');
+          }
+        });    
+      }
+    }
+  }
+
+  shouldComponentUpdate(nextProps, nextState){
+    return this.state.errorMessage !== nextState.errorMessage;
+  }
+
+  render(){
+    let errorMessage = <span></span>;
+    if(this.state.errorMessage){
+      errorMessage = <span className='alert-danger'>{this.state.errorMessage}</span>;
+    }
+    return(     
+      <div> 
+        <div className='row'>
+          {errorMessage}            
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <input id='username' className='form-control' type='text' onChange={this.changeInput} value={this.username} />
+          </div>
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <input id='password' className='form-control' type='text' onChange={this.changeInput} value={this.password} />
+          </div>            
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <button id='signin' className='btn btn-primary float-right' onClick={this.click}>Sign in</button>
+          </div>            
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <a href='#' id='signup' className='float-right' onClick={this.click}>Click here to signup</a>
+          </div>            
+        </div>        
+      </div>);
+  }
+}
+
+//=======================================================================================================
 // Main application 
 
 const App:React.FC = () => {
+
+  const jwtToken = getCookie('token');
+  if(jwtToken){
+  }
+
   return (
    <Provider store={myStore}>
     <div className='w-50 m-3'>
-      <TodoHeader1/>
-      <TodoInput1/>
-      <TodoList1/>        
-      <TodoFooter1/>
-      <MyModal1/>
+      <InitializeWrap />
     </div>
    </Provider>
   );

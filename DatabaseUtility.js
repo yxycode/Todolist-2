@@ -54,7 +54,7 @@ function loginRequest(request, callback){
       callback({isSuccess: true, token: generateToken(username)});
     }
     else {
-      callback({isSuccess: false});
+      callback({isSuccess: false, result: result});
     }
   });
 }
