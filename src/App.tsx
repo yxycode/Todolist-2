@@ -56,6 +56,7 @@ const InitialState:TodoState = {
 function myReducer(state:TodoState = InitialState, action:any){
   let newState = JSON.parse(JSON.stringify(state));
   switch(action.type){
+
     case 'SET_CURRENT_TEXT':
       newState.currentText = action.value;
       break;
@@ -217,11 +218,20 @@ function removeTodoList(state:TodoState, todoListId:string){
 }
 
 function setTodoLists(state:TodoState, todoLists?:TodoListObject[], selectedListName?:string){
-  if(todoLists && todoLists.length > 0){
-    state.todoListId = todoLists[0]._id;
-    state.todoListName = todoLists[0].todoListName;
-    state.todoListItems = todoLists[0].todoListItems;
-    state.todoLists = todoLists;
+
+  if(todoLists){
+    if(todoLists.length > 0){
+      state.todoListId = todoLists[0]._id;
+      state.todoListName = todoLists[0].todoListName;
+      state.todoListItems = todoLists[0].todoListItems;
+      state.todoLists = todoLists;
+    }
+    else if(!selectedListName) {
+      state.todoListId = '';
+      state.todoListName = '';
+      state.todoListItems = [];
+      state.todoLists = [];        
+    }
   }
   if(selectedListName){
     for(let i = 0; i < state.todoLists.length; i++){
@@ -518,11 +528,12 @@ class TodoHeader extends React.Component {
       myStore.dispatch({type: 'SET_CURRENT_LIST', selectedListName: id});
     }
     else if(id === 'logout'){
-      this.props.parent.setState({jwtToken: '', page: 'login'});      
       deleteCookie('token');
+      myStore.dispatch({type: 'UPDATE_LISTS', lists: []});
+      this.props.parent.setState({jwtToken: '', page: 'login', isTokenChecked: true, isDataRetrievalAttempted: false});        
     }
   }
-
+   
   onMouseLeave(event){
     let id = event.target.id;
     if(id === 'listNames'){
@@ -634,7 +645,7 @@ class MyModal extends React.Component {
           break;
         default:
           break;
-      };//bookmark
+      };
     }
     else if(id === 'close'){
       this.props.doModal('HIDE');
@@ -737,9 +748,9 @@ class InitializeWrap extends React.Component {
     this.retrieveTodoLists = this.retrieveTodoLists.bind(this);
   }
 
-  retrieveTodoLists(){
+  retrieveTodoLists(token:string){
     const This:any = this;
-    makeRequest('/getdata', 'GET', {'authorization':this.state.jwtToken}, 
+    makeRequest('/getdata', 'GET', {'authorization':token}, 
       {}).then(function(result:any){
         result = JSON.parse(result);
         if(result.isSuccess){
@@ -761,7 +772,7 @@ class InitializeWrap extends React.Component {
           {command: 'VALIDATE_TOKEN'}).then(function(result:any){
           result = JSON.parse(result);
           if(result.isSuccess){
-            This.retrieveTodoLists();
+            This.retrieveTodoLists(This.state.jwtToken);
            //This.setState({isTokenChecked: true, page: 'account'});
           }
           else {
@@ -777,6 +788,9 @@ class InitializeWrap extends React.Component {
   }
 
   shouldComponentUpdate(nextProps, nextState){
+    if(nextState.jwtToken && !nextState.isDataRetrievalAttempted){
+      this.retrieveTodoLists(nextState.jwtToken);
+    }
     return this.state.page !== nextState.page || this.state.isTokenChecked !== nextState.isTokenChecked 
       || this.state.jwtToken !== nextState.jwtToken;
   }
@@ -800,7 +814,7 @@ class InitializeWrap extends React.Component {
       if(this.state.page === 'login'){
         return(
           <div className='w-50 m-3'>
-            <Login parent={this} />
+            <Login parent={this}/>
           </div>
         );
       }
