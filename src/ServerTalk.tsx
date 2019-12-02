@@ -18,10 +18,11 @@ export const makeRequest = function(url:string, method:string = 'GET', headerFie
 		});
 	  }    
 	};
+
+	request.open(method || 'GET', url, true);
     for(const key in headerFields){
       request.setRequestHeader(key, headerFields[key]);
-    }    
-	request.open(method || 'GET', url, true);
+    }        
     if(method === 'GET'){
       request.send();
     }

@@ -1,44 +1,19 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# Todo List in React, Redux, Typescript, Bootstrap, and MongoDB
 
-## Available Scripts
+This is a simple, interactive web application for creating todo lists. Allows for the unlimited creation of private todo lists with the ability the save/edit/delete. Users will have to create an account before creating todo lists. 
 
-In the project directory, you can run:
+### Login
 
-### `npm start`
+![](https://user-images.githubusercontent.com/17861851/69931773-5784a600-147d-11ea-9f12-02d780827886.png)
 
-Runs the app in the development mode.<br />
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### Registration
 
-The page will reload if you make edits.<br />
-You will also see any lint errors in the console.
+![](https://user-images.githubusercontent.com/17861851/69931778-5a7f9680-147d-11ea-8914-c0c43596ce9c.png)
 
-### `npm test`
+### Work Area
 
-Launches the test runner in the interactive watch mode.<br />
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+![](https://user-images.githubusercontent.com/17861851/69931780-5bb0c380-147d-11ea-9aac-8e6f16daca96.png)
 
-### `npm run build`
+### Creating New List
 
-Builds the app for production to the `build` folder.<br />
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br />
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+![](https://user-images.githubusercontent.com/17861851/69931783-5ce1f080-147d-11ea-8409-0a8b56fda216.png)

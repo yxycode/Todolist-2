@@ -7,70 +7,6 @@ import { Provider } from 'react-redux';
 import thunk from 'redux-thunk';
 import { makeRequest, getCookie, setCookie, deleteCookie } from './ServerTalk';
  
-function getFromServer(path:string, params:{}, callBackFunc:Function):void{
-  var ajax = new XMLHttpRequest();
-  ajax.onreadystatechange = function(){
-    if(this.readyState === 4 && this.status === 200){
-      console.log('Retrieve data successfully...');
-      callBackFunc(true, this.responseText);
-    }
-    else if(this.readyState === 4) {
-      console.log('Failed to retrieve data...');
-      console.log('this.readyState = ' + this.readyState + ', this.status = ' + this.status);
-      callBackFunc(false, this.responseText);
-    }
-  }
-  ajax.open('GET', 'getdata', true);
-  //ajax.setRequestHeader('Content-type', 'multipart/form-data');
-  //var formData = new FormData(form);
-  //ajax.send(formData);
-  ajax.send();
-}
-
-class MyDataTable extends React.Component {
-  state:any;
-  constructor(props:{}) {
-    super(props);
-    this.state = {message: ''};
-    this.processServerResponse = this.processServerResponse.bind(this);
-  }
-
-  processServerResponse(isSuccess:boolean, response:string):void{
-    if(isSuccess){
-      this.setState({message: response});
-    }
-    else {
-      this.setState({message:'Failed to retrieve data from server...'});
-    }
-  }
-
-  componentDidMount() {
-    getFromServer('getdata', {}, this.processServerResponse);
-  }
-
-  componentWillUnmount() {
-  }
-
-  shouldComponentUpdate(nextProps, nextState){
-    return this.state.message !== nextState.message;
-  }
-
-  render(){
-    const message:string = this.state.message;
-    return (<span>{message}</span>
-    );
-  }
-}
-
-/*
-const App: React.FC = () => {
-  return (
-    <div>
-      <MyDataTable/>   
-    </div>
-  );
-}
-*/
 //=======================================================================================================
 //#######################################################################################################
 //=======================================================================================================
@@ -89,7 +25,7 @@ type TodoListObject = {
 
 type TodoState = {
   currentText:string;
-  todoListItems:[];
+  todoListItems:TodoListItem[];
   previousAction:string;
   todoListFilter:string;
   todoListId: string;
@@ -119,7 +55,6 @@ const InitialState:TodoState = {
 
 function myReducer(state:TodoState = InitialState, action:any){
   let newState = JSON.parse(JSON.stringify(state));
-        console.log(JSON.stringify(action));
   switch(action.type){
     case 'SET_CURRENT_TEXT':
       newState.currentText = action.value;
@@ -144,7 +79,6 @@ function myReducer(state:TodoState = InitialState, action:any){
       newState.isShowTodoListMenu = !state.isShowTodoListMenu;
       break;
     case 'DO_MODAL':
-
       newState.modalError = '';
       switch(action.operation){
         case 'SHOW_NEW':
@@ -158,6 +92,8 @@ function myReducer(state:TodoState = InitialState, action:any){
           }
           else {
             newState.todoListName = action.value;
+            newState.todoListId = '';
+            newState.todoListItems = [];
             newState.isShowModal = false;
           }
           break;
@@ -191,6 +127,13 @@ function myReducer(state:TodoState = InitialState, action:any){
     case 'SET_TOKEN':
       newState.jwtToken = action.token;
       break;
+    case 'UPDATE_LISTS':
+      setTodoLists(newState, action.lists);
+      break;
+    case 'SET_CURRENT_LIST':
+      setTodoLists(newState, [], action.selectedListName);
+      newState.isShowTodoListMenu = false;
+      break;
     default:
       break;
   }
@@ -217,7 +160,7 @@ function checkListNameDuplicate(state:TodoState, listName:string){
 function getCurrentTodoList(){
 
   const mainState = myStore.getState();
-  const todoList = {
+  const todoList:TodoListObject = {
     _id: '',
     todoListName: mainState.todoListName,
     todoListItems: []
@@ -273,6 +216,25 @@ function removeTodoList(state:TodoState, todoListId:string){
   }
 }
 
+function setTodoLists(state:TodoState, todoLists?:TodoListObject[], selectedListName?:string){
+  if(todoLists && todoLists.length > 0){
+    state.todoListId = todoLists[0]._id;
+    state.todoListName = todoLists[0].todoListName;
+    state.todoListItems = todoLists[0].todoListItems;
+    state.todoLists = todoLists;
+  }
+  if(selectedListName){
+    for(let i = 0; i < state.todoLists.length; i++){
+      if(state.todoLists[i].todoListName === selectedListName){
+         state.todoListId = state.todoLists[i]._id;
+         state.todoListName = state.todoLists[i].todoListName;
+         state.todoListItems = state.todoLists[i].todoListItems;          
+         break;
+      }
+    }
+  }  
+}
+
 //=======================================================================================================
 // Actions
 
@@ -301,7 +263,6 @@ function doModal(operation:string, value?:string){
   let isSuccess = false;
   let result = {};
   function doModal2(){
-    console.log('dispatching...');
     const modalTypeMap = {
       'SHOW_NEW' : 'SHOW_NEW',  
       'SHOW_SAVE' : 'SHOW_SAVE',
@@ -315,13 +276,10 @@ function doModal(operation:string, value?:string){
       result: result};      
   }
   const serverOperations = ['SAVE_LIST', 'DELETE_LIST'];
-
   return function(dispatch:Function){
-//bookmark
+
     if(!serverOperations.includes(operation)){
-      return function(){
-        dispatch(doModal2());
-      }
+      dispatch(doModal2());
     }
     else {
       let path:string = '/';
@@ -525,9 +483,10 @@ const TodoFooter1 = connect(mapStateToProps3, mapDispatchToProps3)(TodoFooter);
 type TodoHeaderProps = {
   isShowTodoListMenu:boolean;
   todoListName:string;
-  todoLists: TodoList[];
+  todoLists: TodoListObject[];
   toggleTodoListMenu:Function;
   doModal:Function;
+  parent:any;
 }
 
 class TodoHeader extends React.Component {
@@ -537,6 +496,7 @@ class TodoHeader extends React.Component {
   constructor(props:TodoHeaderProps){
     super(props);
     this.buttonClick = this.buttonClick.bind(this);
+    this.onMouseLeave = this.onMouseLeave.bind(this);
   }
 
   buttonClick(event){
@@ -555,46 +515,63 @@ class TodoHeader extends React.Component {
       this.props.doModal('SHOW_DELETE');
     }
     else if(data.islistitem === 'true'){
-      this.props.toggleTodoListMenu();
+      myStore.dispatch({type: 'SET_CURRENT_LIST', selectedListName: id});
+    }
+    else if(id === 'logout'){
+      this.props.parent.setState({jwtToken: '', page: 'login'});      
+      deleteCookie('token');
     }
   }
 
-  componentDidMount() {
-  }
-
-  componentWillUnmount() {
+  onMouseLeave(event){
+    let id = event.target.id;
+    if(id === 'listNames'){
+      this.props.toggleTodoListMenu();
+    }
   }
 
   render(){
     let todoListName:string = this.props.todoListName ? this.props.todoListName : '(Unsaved list)';
     let todoListNames:{}[] = [];
     const todoLists = this.props.todoLists;
-    for(let i = 0; i <= todoLists.length; i++){
-      todoListNames.push(<a key={i} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true'>todoLists[i].todoListName</a>);
+    for(let i = 0; i < todoLists.length; i++){
+      todoListNames.push(<a key={i} id={todoLists[i].todoListName} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true' >{todoLists[i].todoListName}</a>);
     }
     let dropDownMenuClass:string = 'dropdown-menu';
     if(this.props.isShowTodoListMenu){
       dropDownMenuClass += ' show';
     }
+    let todoListWrapper = <div></div>;
+    if(todoLists.length > 0){
+      todoListWrapper = <div className={dropDownMenuClass}>{todoListNames}</div>;
+    }
+    const hasTodoListName:boolean = this.props.todoListName ? false : true;
     return(
-      <div className='row mb-3'>
-        <div className='col'>
-          <div className='dropdown'>
-            <button id='todoDropDown' className='btn btn-primary dropdown-toggle' onClick={this.buttonClick} onBlur={this.buttonClick}>
-              {todoListName}
-            </button>
-            <div className={dropDownMenuClass}>
-              {todoListNames}
-            </div>
-          </div>    
-        </div>
-        <div className='col'>
-          <div className='float-right'>     
-            <button className='btn btn-primary' id='new' onClick={this.buttonClick} >New</button>&nbsp;
-            <button className='btn btn-info' id='save' onClick={this.buttonClick} >Save</button>&nbsp;
-            <button className='btn btn-warning' id='delete' onClick={this.buttonClick} >Delete</button>
+      <div>
+        <div className='row mb-2'>
+          <div className='col'>
+            <a id='logout' className='float-right' href='#' onClick={this.buttonClick}>Log out</a>
           </div>
         </div>
+        <div className='row mb-3'>
+          <div className='col'>
+            <div id='dropdown' className='dropdown' >
+              <button id='todoDropDown' className='btn btn-primary dropdown-toggle' onClick={this.buttonClick} >
+                {todoListName}
+              </button>
+              <div id='listNames' onMouseLeave={this.onMouseLeave}>
+                {todoListWrapper}
+              </div>
+            </div>    
+          </div>
+          <div className='col'>
+            <div className='float-right'>     
+              <button className='btn btn-primary' id='new' onClick={this.buttonClick} >New</button>&nbsp;
+              <button className='btn btn-info' id='save' onClick={this.buttonClick} disabled={hasTodoListName}>Save</button>&nbsp;
+              <button className='btn btn-warning' id='delete' onClick={this.buttonClick} >Delete</button>
+            </div>
+          </div>
+       </div>
      </div>
     );
   }
@@ -641,13 +618,7 @@ class MyModal extends React.Component {
   }
 
   buttonClick(event){
-    console.log(JSON.stringify(this.props));
-    let id = event.target.id;
-/*
-      'CREATE_LIST': 'HIDE',
-      'SAVE_LIST' : 'HIDE',
-      'DELETE_LIST' : 'HIDE',
-*/    
+    let id = event.target.id;  
     if(id === 'okay'){
       switch(this.props.modalType){
         case 'SHOW_NEW':
@@ -656,8 +627,11 @@ class MyModal extends React.Component {
           }
           break;
         case 'SHOW_SAVE':
+          this.props.doModal('SAVE_LIST');
           break;
         case 'SHOW_DELETE':
+          this.props.doModal('DELETE_LIST');
+          break;
         default:
           break;
       };//bookmark
@@ -668,12 +642,19 @@ class MyModal extends React.Component {
   }
 
   render(){
-    const modalError = <span className='alert-danger'>{this.props.modalError}</span>;
+    let modalError = <span></span>;
+    let hasError:boolean = false;
+    if(this.props.modalError){
+      hasError = true;
+      modalError = <span className='alert-danger p-2 rounded'>{this.props.modalError}</span>;
+    }
     const modalTypeMap = {
       'SHOW_NEW' : {title: 'Create New List',
          body: 
            <div className='row'>
-             <div className='col-4'>Todolist Name</div>
+             <div className='col-4'>
+               <label htmlFor='todoListNameInput'>Todolist Name</label> 
+             </div>
              <div className='col-8'>
                <input className='form-control' id='todoListNameInput' type='text' onChange={this.onChangeInputText} />
             </div>
@@ -684,7 +665,7 @@ class MyModal extends React.Component {
       'NONE': {title: '', body: ''}
     };
     const modalType = this.props.modalType ? this.props.modalType : 'NONE';
-    const modalTitle:string = modalTypeMap[modalType].title;
+    const modalTitle:string = hasError ? 'Error' : modalTypeMap[modalType].title;
     const modalBody:string = modalTypeMap[modalType].body;
     const isShow = this.props.isShowModal ? 'show' : '';
     const mStyle:{} = isShow ? {display: 'block'} : {};
@@ -700,11 +681,9 @@ class MyModal extends React.Component {
                   <button type="button" id='close' className="close" data-dismiss="modal" onClick={this.buttonClick}>&times;</button>
                 </div>
                 <div className="modal-body">
-                  <div className="row">
                     {modalBody}
-                  </div>
                   <div className="row">
-                    {modalError}
+                    <span className="pl-2">{modalError}</span>
                   </div>
                 </div>
                 <div className="modal-footer">
@@ -751,9 +730,27 @@ class InitializeWrap extends React.Component {
     super(props);
     this.state = {
       isTokenChecked: false,
+      isDataRetrievalAttempted: false,
       jwtToken: getCookie('token'),
       page: ''
     };
+    this.retrieveTodoLists = this.retrieveTodoLists.bind(this);
+  }
+
+  retrieveTodoLists(){
+    const This:any = this;
+    makeRequest('/getdata', 'GET', {'authorization':this.state.jwtToken}, 
+      {}).then(function(result:any){
+        result = JSON.parse(result);
+        if(result.isSuccess){
+          myStore.dispatch({type: 'UPDATE_LISTS', lists: result.result});
+          This.setState({isTokenChecked: true, isDataRetrievalAttempted: true, page: 'account'});
+        }
+        else {
+          This.setState({jwtToken: '', page: 'login'});
+          deleteCookie('token');
+        }
+    });
   }
 
   componentDidMount() {
@@ -762,8 +759,10 @@ class InitializeWrap extends React.Component {
       if(!this.state.isTokenChecked){
         makeRequest('/postdata', 'POST', {'authorization':this.state.jwtToken}, 
           {command: 'VALIDATE_TOKEN'}).then(function(result:any){
+          result = JSON.parse(result);
           if(result.isSuccess){
-            This.setState({isTokenChecked: true, page: 'account'});
+            This.retrieveTodoLists();
+           //This.setState({isTokenChecked: true, page: 'account'});
           }
           else {
             This.setState({jwtToken: '', page: 'login'});
@@ -789,12 +788,12 @@ class InitializeWrap extends React.Component {
     else if(this.state.isTokenChecked && this.state.jwtToken && this.state.page === 'account'){
       return(
         <div className='w-50 m-3'>
-          <TodoHeader1/>
+          <TodoHeader1 parent={this} />
           <TodoInput1/>
           <TodoList1/>        
           <TodoFooter1/>
           <MyModal1/>
-        </div>
+       </div>
       );
     }
     else if(this.state.isTokenChecked && !this.state.jwtToken){
@@ -892,9 +891,9 @@ class Registration extends React.Component {
       if(!hasError){
         makeRequest('/postdata', 'POST', {}, {command: 'CREATE_USER', email: this.inputs.email.value, 
           username: this.inputs.username.value, password: this.inputs.password.value}).then(function(result:any){
+          result = JSON.parse(result);
           if(result.isSuccess){
             This.setState({isSuccessfulAccountCreation: true});
-            setCookie('token', result.token, 1);
           }
           else {
             This.setState({errorMessage: 'Failed to register account.'});
@@ -909,13 +908,14 @@ class Registration extends React.Component {
   }
 
   shouldComponentUpdate(nextProps, nextState){
-    return this.state.hasError != nextState.hasError;
+    return this.state.hasError != nextState.hasError || 
+      this.state.isSuccessfulAccountCreation != nextState.isSuccessfulAccountCreation;
   }
 
   render(){
     let errorMessage = <span></span>;
     if(this.state.errorMessage){
-      errorMessage = <span className='alert-danger'>{this.state.errorMessage}</span>;
+      errorMessage = <span className='alert-danger p-2 rounded'>{this.state.errorMessage}</span>;
     }
     if(this.state.isSuccessfulAccountCreation){
       return(
@@ -925,7 +925,7 @@ class Registration extends React.Component {
       );
     }
     return(     
-      <div> 
+      <div className='w-50 m-3'> 
         <div className='row'>
           {errorMessage}            
         </div>
@@ -953,6 +953,9 @@ class Registration extends React.Component {
         </div>
         <div className='row mt-2'>
           <div className='col'>
+            <a href='#' id='gotoLogin' className='float-left' onClick={this.click}>Go back to login</a>
+          </div>             
+          <div className='col'>
             <button id='signup' className='btn btn-primary float-right' onClick={this.click}>Sign up</button>
           </div>            
         </div>
@@ -975,6 +978,8 @@ class Login extends React.Component {
     this.changeInput = this.changeInput.bind(this);
     this.click = this.click.bind(this);
     this.state = {errorMessage: ''};
+    this.username = '';
+    this.password = '';
   }
 
   changeInput(event){
@@ -995,6 +1000,7 @@ class Login extends React.Component {
       if(this.username && this.password){
         makeRequest('/postdata', 'POST', {}, {command: 'LOGIN', username: this.username, 
           password: this.password}).then(function(result:any){
+          result = JSON.parse(result);
           if(result.isSuccess){
             This.props.parent.setState({isTokenChecked: true, jwtToken: result.token, page: 'account'});
             setCookie('token', result.token, 1);
@@ -1015,21 +1021,24 @@ class Login extends React.Component {
   render(){
     let errorMessage = <span></span>;
     if(this.state.errorMessage){
-      errorMessage = <span className='alert-danger'>{this.state.errorMessage}</span>;
+      errorMessage = <span className='alert-danger p-2 rounded'>{this.state.errorMessage}</span>;
     }
     return(     
-      <div> 
+      <div className='w-50 m-3'> 
+        <h3>Login to your Account</h3>
         <div className='row'>
-          {errorMessage}            
-        </div>
-        <div className='row mt-2'>
-          <div className='col'>
-            <input id='username' className='form-control' type='text' onChange={this.changeInput} value={this.username} />
+          <div className='col m-2'>
+            {errorMessage}
           </div>
         </div>
         <div className='row mt-2'>
           <div className='col'>
-            <input id='password' className='form-control' type='text' onChange={this.changeInput} value={this.password} />
+            <input id='username' className='form-control' type='text' onChange={this.changeInput} />
+          </div>
+        </div>
+        <div className='row mt-2'>
+          <div className='col'>
+            <input id='password' className='form-control' type='password' onChange={this.changeInput} />
           </div>            
         </div>
         <div className='row mt-2'>
@@ -1057,9 +1066,7 @@ const App:React.FC = () => {
 
   return (
    <Provider store={myStore}>
-    <div className='w-50 m-3'>
-      <InitializeWrap />
-    </div>
+    <InitializeWrap />
    </Provider>
   );
 }

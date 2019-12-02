@@ -15,6 +15,7 @@ exports.loginRequest = loginRequest;
 exports.upsertTodoListRequest = upsertTodoListRequest; 
 exports.deleteTodoListRequest = deleteTodoListRequest;
 exports.retrieveTodoListsRequest = retrieveTodoListsRequest;
+exports.validateToken = validateToken;
 
 function generateToken(username){
   return jwt.sign({username: username}, jwtSecret, {expiresIn: '24h'});
@@ -24,17 +25,17 @@ function validateToken(request, callback){
   let token = request.headers['x-access-token'] || request.headers['authorization']; 
   if(token.startsWith('Bearer ')) {
     token = token.slice(7, token.length);
-    if(token){
-      jwt.verify(token, jwtSecret, (err, decoded) => {
-        if(err){
-          callback({isSuccess: false, message: 'Invalid token.'});
-        } 
-        else {
-          request.decoded = decoded;
-          callback({isSuccess: true});
-        }
-      });        
-    }
+  }
+  if(token){
+    jwt.verify(token, jwtSecret, (err, decoded) => {
+      if(err){
+        callback({isSuccess: false, message: 'Invalid token.'});
+      } 
+      else {
+        request.decoded = decoded;
+        callback({isSuccess: true});
+      }
+    });        
   }    
 }
 
@@ -76,8 +77,12 @@ function deleteTodoListRequest(request, callback){
   validateToken(request, function(result){
     if(result.isSuccess){
       const decodedUserName = request.decoded.username;
-      const todoList = request.body.todoList;    
-      deleteTodoList(decodedUserName, todoList,function(result){
+      let todoList = request.body.todoList;    
+      const _id  = request.body._id;
+      if(!todoList){
+        todoList = {_id: _id};
+      }
+      deleteTodoList(decodedUserName, todoList, function(result){
         callback({isSuccess: true, result: result.result});
       });
     }
@@ -122,11 +127,11 @@ function createUserRecord(userObj, callback){
   findRecords(collectionUsers, queryObj, function(result){
     if(result && result.result.length == 0){
       insertRecord(collectionUsers, userObj2, function(){
-        callback({success: true});
+        callback({isSuccess: true});
       });   
     }
     else {
-      const errorObj = {success: false, errors: []};
+      const errorObj = {isSuccess: false, errors: []};
       for(let i = 0; i < result.length; i++){
         if(result[i].email == queryObj.email){
           errorObj.errors.push('This email is already taken.');
@@ -161,8 +166,10 @@ function upsertTodoList(userName, todoList, callback){
 function deleteTodoList(userName, todoList, callback){
   const queryObj = {
     userName: userName,
-    todoListName: todoList.todoListName
   };
+  if(todoList){
+    queryObj.todoListName = todoList.todoListName;
+  }
   if(todoList._id){
     deleteRecord(collectionLists, {_id:  ObjectID(todoList._id)}, callback);
   }  
@@ -189,7 +196,7 @@ function loginMongoDB(callback){
     handleError(err);
     database = db;
     databaseObj = database.db(dbName);
-    console.log(`Database ${dbName} created.`);
+    //console.log(`Database ${dbName} created.`);
     callback();
   });    
 }
@@ -197,7 +204,7 @@ function loginMongoDB(callback){
 function createCollection(collectionName, callback){
   databaseObj.createCollection(collectionName, function(err, result){
     handleError(err);
-    console.log(`Collection ${collectionName} created.`);
+    //console.log(`Collection ${collectionName} created.`);
     callback({isSuccess: true, result: result});
   });
 }
