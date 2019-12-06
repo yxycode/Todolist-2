@@ -1,7 +1,5 @@
 # Todo List in React, Redux, Typescript, Bootstrap, and MongoDB
 
-## Summary
-
 This is a simple, interactive web application for creating todo lists. Allows for the unlimited creation of private todo lists with the ability the save/edit/delete. Users will have to create an account before creating todo lists. 
 
 ### Demo
