@@ -1,0 +1,14 @@
+.alink {     
+}
+
+.alink:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}   
+
+.amenuitem {
+}
+
+.amenuitem:hover {
+  cursor: pointer;
+}

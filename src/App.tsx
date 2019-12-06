@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './bootstrap.min.css';
+import './custom.css';
 import { connect } from 'react-redux';
 import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
@@ -546,7 +547,7 @@ class TodoHeader extends React.Component {
     let todoListNames:{}[] = [];
     const todoLists = this.props.todoLists;
     for(let i = 0; i < todoLists.length; i++){
-      todoListNames.push(<a key={i} id={todoLists[i].todoListName} className='dropdown-item' href='#' onClick={this.buttonClick} data-islistitem='true' >{todoLists[i].todoListName}</a>);
+      todoListNames.push(<span key={i} id={todoLists[i].todoListName} className='dropdown-item amenuitem' onClick={this.buttonClick} data-islistitem='true' >{todoLists[i].todoListName}</span>);
     }
     let dropDownMenuClass:string = 'dropdown-menu';
     if(this.props.isShowTodoListMenu){
@@ -561,7 +562,7 @@ class TodoHeader extends React.Component {
       <div>
         <div className='row mb-2'>
           <div className='col'>
-            <a id='logout' className='float-right' href='#' onClick={this.buttonClick}>Log out</a>
+            <span id='logout' className='float-right text-primary alink' onClick={this.buttonClick}>Log out</span>
           </div>
         </div>
         <div className='row mb-3'>
@@ -933,8 +934,7 @@ class Registration extends React.Component {
     }
     if(this.state.isSuccessfulAccountCreation){
       return(
-        <div>Successfully created account. Please <a href='#' id='gotoLogin' onClick={this.click}>here</a> 
-          to go to the login page.
+        <div>Successfully created account. Please <span className='text-primary alink' id='gotoLogin' onClick={this.click}>here</span> to go to the login page.
         </div>   
       );
     }
@@ -967,7 +967,7 @@ class Registration extends React.Component {
         </div>
         <div className='row mt-2'>
           <div className='col'>
-            <a href='#' id='gotoLogin' className='float-left' onClick={this.click}>Go back to login</a>
+            <span id='gotoLogin' className='float-left text-primary alink' onClick={this.click}>Go back to login</span>
           </div>             
           <div className='col'>
             <button id='signup' className='btn btn-primary float-right' onClick={this.click}>Sign up</button>
@@ -1062,7 +1062,7 @@ class Login extends React.Component {
         </div>
         <div className='row mt-2'>
           <div className='col'>
-            <a href='#' id='signup' className='float-right' onClick={this.click}>Click here to signup</a>
+            <span id='signup' className='float-right text-primary alink' onClick={this.click}>Click here to signup</span>
           </div>            
         </div>        
       </div>);
