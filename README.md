@@ -10,7 +10,7 @@ This is a simple, interactive web application for creating todo lists. Allows fo
 
 ### Login
 
-![](https://user-images.githubusercontent.com/17861851/69931773-5784a600-147d-11ea-9f12-02d780827886.png)
+![](https://user-images.githubusercontent.com/17861851/76160032-56e25800-60db-11ea-9290-fb8f8b640974.png)
 
 ### Registration
 

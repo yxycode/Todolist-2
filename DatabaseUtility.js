@@ -2,6 +2,7 @@ const MongoClient = require('mongodb').MongoClient;
 var ObjectID = require('mongodb').ObjectID;
 const jwt = require('jsonwebtoken');
 
+//const url = 'mongodb+srv://mongoman:firebeam@cluster0-1kun5.mongodb.net/test/';
 const url = 'mongodb://localhost:27017/';
 const dbName = 'todolistdatabase';
 const collectionUsers = 'users';
@@ -132,11 +133,11 @@ function createUserRecord(userObj, callback){
     }
     else {
       const errorObj = {isSuccess: false, errors: []};
-      for(let i = 0; i < result.length; i++){
-        if(result[i].email == queryObj.email){
+      for(let i = 0; i < result.result.length; i++){
+        if(result.result[i].email == userObj.email){
           errorObj.errors.push('This email is already taken.');
         }
-        if(result[i].username == queryObj.username){
+        if(result.result[i].username == userObj.username){
           errorObj.errors.push('This username is already taken.');
         }
       }

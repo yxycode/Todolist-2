@@ -906,12 +906,25 @@ class Registration extends React.Component {
       if(!hasError){
         makeRequest('/postdata', 'POST', {}, {command: 'CREATE_USER', email: this.inputs.email.value, 
           username: this.inputs.username.value, password: this.inputs.password.value}).then(function(result:any){
-          result = JSON.parse(result);
+          result = JSON.parse(result);          
           if(result.isSuccess){
             This.setState({isSuccessfulAccountCreation: true});
           }
           else {
-            This.setState({errorMessage: 'Failed to register account.'});
+            if(result.errors){
+              for(let i = 0; i < result.errors.length; i++){
+                const error = result.errors[i];
+                if(error.includes('email')){
+                  This.inputs.email.errorClass = 'is-invalid';
+                  This.inputs.email.message = error;                   
+                }
+                else if(error.includes('username')){
+                  This.inputs.username.errorClass = 'is-invalid';
+                  This.inputs.username.message = error;                       
+                }                
+              }  
+            }          
+            This.setState({errorMessage: 'Failed to register account.', isSuccessfulAccountCreation: false});            
             deleteCookie('token');
           }
         });              
@@ -940,10 +953,12 @@ class Registration extends React.Component {
     }
     return(     
       <div className='w-50 m-3'> 
-        <div className='row'>
-          {errorMessage}            
-        </div>
         <h3>Register a New Account</h3>
+        <div className='row'>
+          <div className='col my-1'>
+            {errorMessage}            
+          </div>
+        </div>        
         <div className='row'>
           <div className='col mt-1'>
            <label htmlFor='email'>Email</label>  
@@ -1047,11 +1062,13 @@ class Login extends React.Component {
         </div>
         <div className='row mt-2'>
           <div className='col'>
+            <label htmlFor='username'>Username</label>  
             <input id='username' className='form-control' type='text' onChange={this.changeInput} />
           </div>
         </div>
         <div className='row mt-2'>
           <div className='col'>
+          <label htmlFor='password'>Password</label>  
             <input id='password' className='form-control' type='password' onChange={this.changeInput} />
           </div>            
         </div>
